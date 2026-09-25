@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roteirizador NF</title>
+  <meta name="description" content="Visualização e simulação de rotas a partir de relatório de notas fiscais em Excel." />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="styles.css?v=16" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="logo-mark">R</div>
+        <div>
+          <p class="eyebrow">LOGÍSTICA</p>
+          <h1>Roteirizador NF</h1>
+        </div>
+      </div>
+
+      <div class="upload-area">
+        <input id="fileInput" class="file-input-native" type="file" accept=".xlsx,.xls" />
+        <label id="uploadBtn" class="btn primary upload-label" for="fileInput" role="button" tabindex="0">Carregar planilha</label>
+        <div id="fileMeta" class="file-meta">Nenhum arquivo carregado</div>
+      </div>
+    </header>
+
+    <section id="statusBanner" class="status-banner info">
+      <div>
+        <strong>Pronto para começar</strong>
+        <span>Carregue o relatório padrão em Excel. Os dados ficam no seu navegador.</span>
+      </div>
+      <button id="statusAction" class="text-btn hidden">Ver detalhes</button>
+    </section>
+
+    <section class="summary-grid" aria-label="Resumo">
+      <article class="metric-card">
+        <span class="metric-label">Notas fiscais</span>
+        <strong id="metricNfs">0</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Destinos</span>
+        <strong id="metricDestinos">0</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Peso total</span>
+        <strong id="metricPeso">0 kg</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Volumes</span>
+        <strong id="metricVolumes">0</strong>
+      </article>
+    </section>
+
+    <section class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="searchInput" type="search" placeholder="Buscar NF, OEF, fornecedor, cliente, almoxarifado ou cidade" />
+      </div>
+      <select id="ufFilter" class="select-control" aria-label="Filtrar por estado">
+        <option value="">Todos os estados</option>
+      </select>
+      <select id="priorityFilter" class="select-control" aria-label="Filtrar por prioridade">
+        <option value="">Todas as prioridades</option>
+      </select>
+      <button id="clearFilters" class="btn ghost">Limpar filtros</button>
+    </section>
+
+    <main class="workspace">
+      <section class="map-panel card">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">VISÃO OPERACIONAL</p>
+            <h2>Mapa de entregas</h2>
+          </div>
+          <div class="map-actions">
+            <div class="map-style-switch" aria-label="Estilo do mapa">
+              <button id="mapNavigationBtn" class="map-style-btn active" type="button">Navegação</button>
+              <button id="mapStreetBtn" class="map-style-btn" type="button">Ruas</button>
+              <button id="mapSatelliteBtn" class="map-style-btn" type="button">Satélite</button>
+            </div>
+            <button id="vocativeToggleBtn" class="map-route-btn" type="button" aria-pressed="false" title="Mostrar ou ocultar o nome dos vocativos nos pins">Mostrar vocativos</button>
+            <button id="branchesToggleBtn" class="map-route-btn active" type="button" aria-pressed="true" title="Mostrar ou ocultar as filiais Della Volpe no mapa">Ocultar filiais</button>
+            <button id="routeModeBtn" class="map-route-btn" type="button" title="Ative para selecionar destinos direto pelo mapa">Montar rota</button>
+            <button id="fitMapBtn" class="icon-btn" type="button" title="Visão ampla de todos os destinos">◎</button>
+          </div>
+        </div>
+        <div id="map"></div>
+        <div id="mapEmpty" class="map-empty">
+          <div class="empty-icon">⌖</div>
+          <strong>Seu mapa aparecerá aqui</strong>
+          <span>Carregue uma planilha para localizar os almoxarifados.</span>
+        </div>
+      </section>
+
+      <aside class="side-panel card">
+        <div class="tabs">
+          <button class="tab active" data-tab="details">Detalhes</button>
+          <button class="tab" data-tab="route">Rota <span id="routeCountBadge" class="badge">0</span></button>
+        </div>
+
+        <section id="detailsTab" class="tab-content active">
+          <div id="detailsEmpty" class="side-empty">
+            <div class="empty-icon">i</div>
+            <strong>Selecione um destino</strong>
+            <span>Clique em um pin para ver todas as NFs vinculadas ao vocativo.</span>
+          </div>
+          <div id="detailsContent" class="hidden"></div>
+        </section>
+
+        <section id="routeTab" class="tab-content">
+          <div class="route-head">
+            <div>
+              <p class="eyebrow">SIMULAÇÃO</p>
+              <h3>Planejamento de rota</h3>
+            </div>
+            <button id="clearRouteBtn" class="text-btn danger">Limpar</button>
+          </div>
+
+          <div class="route-summary">
+            <div><span>Distância</span><strong id="routeDistance">0 km</strong></div>
+            <div><span>Tempo base</span><strong id="routeDuration">0 min</strong><small class="route-metric-note">sem trânsito em tempo real</small></div>
+            <div><span>Peso</span><strong id="routeWeight">0 kg</strong></div>
+            <div><span>NFs</span><strong id="routeNfs">0</strong></div>
+          </div>
+
+          <div id="routeHint" class="route-hint">Ative “Montar rota” no mapa e clique nos pins, ou adicione pelo painel de detalhes.</div>
+          <div id="routeList" class="route-list"></div>
+          <div class="route-source-note">A estimativa interna usa o OSRM e não considera trânsito ao vivo. Para conferir o tempo atual e possíveis diferenças de trajeto, abra a mesma sequência no Google Maps.</div>
+          <div class="route-actions">
+            <button id="recalculateRouteBtn" class="btn primary full">Calcular rota</button>
+            <button id="openGoogleMapsBtn" class="btn secondary full" type="button">Abrir no Google Maps</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <div id="errorModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="errorModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">INCONSISTÊNCIAS</p>
+          <h2 id="errorModalTitle">Destinos não localizados</h2>
+        </div>
+        <button id="closeModalBtn" class="icon-btn">×</button>
+      </div>
+      <p class="modal-intro">Revise os registros abaixo. Eles continuam no relatório, mas não aparecem no mapa. Quando houver uma posição aproximada disponível, você pode liberá-la manualmente. A confiança é um índice de validação dos dados, não uma probabilidade estatística de acerto.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Almoxarifado</th>
+              <th>CEP</th>
+              <th>Cidade/UF</th>
+              <th>NFs</th>
+              <th>Confiança</th>
+              <th>Motivo</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody id="errorTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="app.js?v=16"></script>
+</body>
+</html>
